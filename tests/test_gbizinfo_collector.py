@@ -4,7 +4,11 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from bs4 import BeautifulSoup
+
 from gbizinfo_collector import (
+    _extract_business_summary,
+    _extract_phone_number,
     resolve_prefecture_code,
     split_address,
     to_company,
@@ -81,6 +85,80 @@ class ToCompanyTest(unittest.TestCase):
         info = {"corporate_number": "1234567890123", "name": "無名株式会社", "location": ""}
         company = to_company(info)
         self.assertEqual(company.employee_number, "")
+
+    def test_employee_number_falls_back_to_company_size_breakdown(self):
+        info = {
+            "corporate_number": "1234567890123",
+            "name": "無名株式会社",
+            "location": "",
+            "employee_number": None,
+            "company_size_male": 18,
+            "company_size_female": 12,
+        }
+        company = to_company(info)
+        self.assertEqual(company.employee_number, "30")
+
+    def test_employee_number_prefers_explicit_value(self):
+        info = {
+            "corporate_number": "1234567890123",
+            "name": "無名株式会社",
+            "location": "",
+            "employee_number": 40,
+            "company_size_male": 18,
+            "company_size_female": 12,
+        }
+        company = to_company(info)
+        self.assertEqual(company.employee_number, "40")
+
+
+class ExtractPhoneNumberTest(unittest.TestCase):
+    def test_prefers_tel_labeled_line(self):
+        text = "会社概要\nFAX：03-9999-9999\nTEL：03-1234-5678\nアクセス"
+        self.assertEqual(_extract_phone_number(text), "03-1234-5678")
+
+    def test_japanese_label(self):
+        text = "お問い合わせ\n電話番号: 042-123-4567\n"
+        self.assertEqual(_extract_phone_number(text), "042-123-4567")
+
+    def test_falls_back_to_any_phone_pattern_excluding_fax_lines(self):
+        text = "アクセス\nFAX：03-9999-9999\n本社：03-1234-5678\n"
+        self.assertEqual(_extract_phone_number(text), "03-1234-5678")
+
+    def test_no_phone_found(self):
+        text = "会社概要\n私たちについて\n"
+        self.assertEqual(_extract_phone_number(text), "")
+
+
+class ExtractBusinessSummaryTest(unittest.TestCase):
+    def test_meta_description_preferred(self):
+        html = """
+        <html><head>
+        <meta name="description" content="当社はソフトウェア開発を中心に事業を展開しています。">
+        </head><body><h2>事業内容</h2><p>詳細はこちら</p></body></html>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        self.assertEqual(
+            _extract_business_summary(soup),
+            "当社はソフトウェア開発を中心に事業を展開しています。",
+        )
+
+    def test_falls_back_to_heading_keyword(self):
+        html = """
+        <html><head></head><body>
+        <h2>事業内容</h2>
+        <p>製造業向けの受託ソフトウェア開発およびコンサルティングを行っています。</p>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        self.assertEqual(
+            _extract_business_summary(soup),
+            "製造業向けの受託ソフトウェア開発およびコンサルティングを行っています。",
+        )
+
+    def test_no_summary_found(self):
+        html = "<html><head></head><body><p>会社概要ページ</p></body></html>"
+        soup = BeautifulSoup(html, "html.parser")
+        self.assertEqual(_extract_business_summary(soup), "")
 
 
 if __name__ == "__main__":

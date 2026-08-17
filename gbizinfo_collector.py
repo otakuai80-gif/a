@@ -69,6 +69,20 @@ DEFAULT_LIMIT = 1000
 REQUEST_INTERVAL_SEC = 0.5
 MAX_RETRIES = 3
 
+USER_AGENT = "gbizinfo-collector/1.0 (company research tool; contact via repository owner)"
+ENRICH_DEFAULT_DELAY_SEC = 1.0
+
+# 電話番号抽出用（TEL: 03-1234-5678 のような表記から拾う。FAXは除外）
+PHONE_PATTERN = re.compile(r"0\d{1,4}-\d{1,4}-\d{3,4}")
+PHONE_PATTERN_NO_HYPHEN = re.compile(r"(?<!\d)0\d{9,10}(?!\d)")
+PHONE_CONTEXT_KEYWORDS = ("tel", "電話")
+PHONE_EXCLUDE_KEYWORDS = ("fax", "ファックス")
+
+# 事業概要抽出用の見出しキーワード
+SUMMARY_HEADING_KEYWORDS = ("事業内容", "事業概要", "事業紹介", "サービス内容")
+SUMMARY_MIN_LEN = 10
+SUMMARY_MAX_LEN = 200
+
 
 @dataclass
 class Company:
@@ -210,6 +224,15 @@ def _request_with_retry(session: requests.Session, headers: dict, params: dict) 
 def to_company(info: dict) -> Company:
     prefecture, city, address = split_address(info.get("location", ""), "")
     employee_number = info.get("employee_number")
+    if employee_number is None:
+        # 従業員数(employee_number)が未登録でも、企業規模詳細(男/女)が
+        # 登録されている法人があるため、その場合は合算値で代用する。
+        male = info.get("company_size_male")
+        female = info.get("company_size_female")
+        if male is not None or female is not None:
+            total = (male or 0) + (female or 0)
+            if total > 0:
+                employee_number = total
     return Company(
         name=info.get("name", ""),
         prefecture=prefecture,
@@ -222,11 +245,97 @@ def to_company(info: dict) -> Company:
     )
 
 
+def _extract_phone_number(text: str) -> str:
+    """ページ本文から電話番号らしき文字列を抽出する（ベストエフォート）。"""
+    for line in text.splitlines():
+        lower = line.lower()
+        if any(k in lower for k in PHONE_EXCLUDE_KEYWORDS):
+            continue
+        if any(k in lower for k in PHONE_CONTEXT_KEYWORDS):
+            match = PHONE_PATTERN.search(line)
+            if match:
+                return match.group(0)
+
+    # 「TEL」等の文脈が見つからない場合は、FAX行を除いた本文全体から探す
+    candidate_lines = [
+        line
+        for line in text.splitlines()
+        if not any(k in line.lower() for k in PHONE_EXCLUDE_KEYWORDS)
+    ]
+    remaining_text = "\n".join(candidate_lines)
+    match = PHONE_PATTERN.search(remaining_text)
+    if match:
+        return match.group(0)
+    match = PHONE_PATTERN_NO_HYPHEN.search(remaining_text)
+    if match:
+        return match.group(0)
+    return ""
+
+
+def _extract_business_summary(soup) -> str:
+    """meta descriptionまたは「事業内容」等の見出し直後のテキストから事業概要を抽出する。"""
+    meta = soup.find("meta", attrs={"name": "description"})
+    if meta and meta.get("content"):
+        content = " ".join(meta["content"].split())
+        if len(content) >= SUMMARY_MIN_LEN:
+            return content[:SUMMARY_MAX_LEN]
+
+    lines = [line.strip() for line in soup.get_text("\n").splitlines() if line.strip()]
+    for i, line in enumerate(lines):
+        if len(line) <= 20 and any(k in line for k in SUMMARY_HEADING_KEYWORDS):
+            for following in lines[i + 1 : i + 4]:
+                if len(following) >= SUMMARY_MIN_LEN:
+                    return following[:SUMMARY_MAX_LEN]
+    return ""
+
+
+def enrich_company_from_website(company: Company, timeout: float = 10.0) -> None:
+    """company_url が分かっている法人について、公式サイトから
+    事業概要・電話番号の補完をベストエフォートで試みる（既に値がある項目は上書きしない）。
+    企業URLが無い法人は対象外（信頼できる自動取得手段が無いため）。
+    """
+    if not company.company_url:
+        return
+    if company.business_summary and company.phone_number:
+        return
+
+    url = company.company_url.strip()
+    if not re.match(r"^https?://", url):
+        url = "https://" + url
+
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError as exc:
+        raise SystemExit(
+            "--enrich-web には beautifulsoup4 が必要です。"
+            "`pip install -r requirements.txt` を実行してください。"
+        ) from exc
+
+    try:
+        resp = requests.get(url, timeout=timeout, headers={"User-Agent": USER_AGENT})
+        resp.raise_for_status()
+    except requests.RequestException as exc:
+        print(f"  [警告] {company.name}: サイト取得に失敗しました ({exc})", file=sys.stderr)
+        return
+
+    if resp.encoding is None or resp.encoding.lower() == "iso-8859-1":
+        resp.encoding = resp.apparent_encoding
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    if not company.phone_number:
+        company.phone_number = _extract_phone_number(soup.get_text("\n"))
+    if not company.business_summary:
+        company.business_summary = _extract_business_summary(soup)
+
+
 def collect(
     token: str,
     prefectures: list[str],
     employee_min: int | None,
     employee_max: int | None,
+    enrich_web: bool = False,
+    enrich_delay: float = ENRICH_DEFAULT_DELAY_SEC,
 ) -> list[Company]:
     session = requests.Session()
     seen_corporate_numbers: set[str] = set()
@@ -252,6 +361,17 @@ def collect(
             count += 1
 
         print(f"  -> {count}件取得", file=sys.stderr)
+
+    if enrich_web:
+        targets = [c for c in companies if c.company_url and (not c.business_summary or not c.phone_number)]
+        print(
+            f"[Web補完] 企業URLのある{len(targets)}件について、事業概要・電話番号の補完を試みます...",
+            file=sys.stderr,
+        )
+        for i, company in enumerate(targets, 1):
+            enrich_company_from_website(company)
+            if i < len(targets):
+                time.sleep(enrich_delay)
 
     return companies
 
@@ -308,6 +428,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="gBizINFO APIトークン（未指定の場合は環境変数 GBIZINFO_API_TOKEN を使用）",
     )
+    parser.add_argument(
+        "--enrich-web",
+        action="store_true",
+        help=(
+            "企業URLが判明している法人について、公式サイトから事業概要・電話番号の補完を"
+            "ベストエフォートで試みる（要 beautifulsoup4、1社ずつ追加でHTTPアクセスするため時間がかかります）"
+        ),
+    )
+    parser.add_argument(
+        "--enrich-delay",
+        type=float,
+        default=ENRICH_DEFAULT_DELAY_SEC,
+        help=f"--enrich-web 使用時、1社あたりの待機秒数（デフォルト: {ENRICH_DEFAULT_DELAY_SEC}）",
+    )
     return parser.parse_args(argv)
 
 
@@ -326,6 +460,8 @@ def main(argv: list[str] | None = None) -> None:
         prefectures=args.prefectures,
         employee_min=args.employee_min,
         employee_max=args.employee_max,
+        enrich_web=args.enrich_web,
+        enrich_delay=args.enrich_delay,
     )
 
     if args.output.lower().endswith(".xlsx"):
