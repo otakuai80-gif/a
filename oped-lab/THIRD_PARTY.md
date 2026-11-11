@@ -9,6 +9,8 @@
 | Dela Gothic One | `public/fonts/dela-gothic-one-*.woff2` | SIL Open Font License 1.1(`LICENSE-dela-gothic-one.txt`) |
 | Space Grotesk | `public/fonts/space-grotesk-*.woff2` | SIL Open Font License 1.1(`LICENSE-space-grotesk.txt`) |
 | クリック音 | `public/audio/click-150bpm.wav` | `scripts/make-click.py` で生成したもの |
+| 仮BGM | `public/audio/anime-op-bgm.wav` | `scripts/make-bgm.py` で生成した、この試作のための創作曲 |
+| 効果音 | `public/audio/sfx/*.wav` | `scripts/make-sfx.py` で生成したもの |
 
 フォントのファイルは Fontsource の配布物から取りました。
 

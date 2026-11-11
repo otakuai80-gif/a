@@ -34,6 +34,7 @@ export const Root: React.FC = () => {
             accent: '#FF4B2B',
             second: '#2447F9',
             third: '#FFC93C',
+            sfx: true,
           }}
         />
         <Composition
@@ -83,7 +84,7 @@ export const Root: React.FC = () => {
               {role: '製作', name: '(製作委員会名)'},
             ],
             art: {a: '', b: '', c: ''},
-            guideClick: true,
+            audio: 'bgm',
           }}
         />
       </Folder>
@@ -103,6 +104,7 @@ export const Root: React.FC = () => {
             bg: '#F3F1EC',
             ink: '#14171A',
             accent: '#0E5F4B',
+            sfx: true,
           }}
         />
       </Folder>

@@ -12,6 +12,7 @@ Remotion で動画の OP と ED を試作するプロジェクト。演出仕様
 | 動画を書き出す | `npx remotion render <ID> out/<ID>.mp4` |
 | 4本まとめて書き出す | `npm run render:all` |
 | サンプル動画を分析する | `bash scripts/analyze.sh <動画ファイル>` |
+| 仮BGM と効果音を作り直す | `python3 scripts/make-bgm.py`、`python3 scripts/make-sfx.py` |
 | Remotion 公式スキルを入れる | `npm run setup:skills` |
 
 コンポジションの ID: `YT-OP`、`YT-ED`、`ANIME-OP`、`CORP-OPENER`
@@ -25,10 +26,10 @@ Remotion で動画の OP と ED を試作するプロジェクト。演出仕様
 | `src/Root.tsx` | コンポジションの登録と既定の文言、色 |
 | `src/compositions/` | ジャンルごとの試作 |
 | `src/compositions/anime/cuts.ts` | アニメ風 OP のカット表(小節と拍で記述) |
-| `src/components/` | 共通部品(`SplitText`、`StrokeDraw`、`Grain`、`ArtSlot`) |
+| `src/components/` | 共通部品(`SplitText`、`StrokeDraw`、`Grain`、`ArtSlot`、`SfxTrack`) |
 | `src/lib/` | `anim.ts`(イージングと tween)、`timing.ts`(拍とフレームの変換)、`fonts.ts` |
-| `scripts/` | 分析、クリック音の生成、一括書き出し |
-| `public/fonts/` | 同梱フォント。`public/audio/` は音、`public/art/` は差し替え用の絵 |
+| `scripts/` | 分析、音の生成(クリック音、仮BGM、効果音。共通部品は `synth.py`)、一括書き出し |
+| `public/fonts/` | 同梱フォント。`public/audio/` は音(`sfx/` は効果音)、`public/art/` は差し替え用の絵 |
 | `analysis/` | 分析結果(git には含めない) |
 
 ## 守ること
@@ -61,7 +62,8 @@ Remotion で動画の OP と ED を試作するプロジェクト。演出仕様
 
 ## 現在の状態
 
-- 4本とも v0。各仕様書の「次に検討すること」が残作業。
+- `YT-OP`、`ANIME-OP`、`CORP-OPENER` は v1、`YT-ED` は v0。各仕様書の「次に検討すること」が残作業。
+- v1 の変更: `ANIME-OP` に仮BGM と A パートのクロスディゾルブ、`YT-OP` と `CORP-OPENER` に効果音。
 - アニメ風のサンプル仕様5本は文献が根拠で、映像での確認はしていない。
-- `ANIME-OP` は曲の代わりにクリック音を鳴らしている。素材枠 A、B、C は空。
+- `ANIME-OP` の音は仮BGM(`scripts/make-bgm.py` で生成した試作用の曲)。カット表を変えたら `make-bgm.py` の構成も直す。本番の曲は未定。素材枠 A、B、C は空。
 - `YT-ED` の枠の位置は、YouTube Studio の終了画面で実際に合わせて調整する必要がある。

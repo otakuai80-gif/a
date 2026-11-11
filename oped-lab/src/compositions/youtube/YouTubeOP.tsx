@@ -2,11 +2,12 @@ import React from 'react';
 import {AbsoluteFill, random, spring, useCurrentFrame, useVideoConfig} from 'remotion';
 import {z} from 'zod';
 import {zColor} from '@remotion/zod-types';
+import {SfxCue, SfxTrack} from '../../components/Sfx';
 import {EASE, tween} from '../../lib/anim';
 import {FONT} from '../../lib/fonts';
 
 /**
- * YouTube系OP 試作 v0(6秒 / 180フレーム)
+ * YouTube系OP 試作 v1(6秒 / 180フレーム)
  * 仕様: docs/specs/01-youtube.md「試作仕様 YT-OP」
  *
  *   0- 24  色帯ワイプ(3本が時間差で横切り、紙色の地を出す)
@@ -15,6 +16,8 @@ import {FONT} from '../../lib/fonts';
  *  62- 92  下線が左から伸びる → タグラインをタイプ表示
  *  88-150  ホールド(紙吹雪が拍ごとに弾ける、全体がゆっくり寄る)
  * 150-180  アイリスアウト(円形に閉じて本編へ)
+ *
+ * 効果音(v1): sfxCues を参照。sfx を false にすると鳴らさない。
  */
 export const youTubeOPSchema = z.object({
   titleTop: z.string(),
@@ -25,6 +28,7 @@ export const youTubeOPSchema = z.object({
   accent: zColor(),
   second: zColor(),
   third: zColor(),
+  sfx: z.boolean(),
 });
 
 export type YouTubeOPProps = z.infer<typeof youTubeOPSchema>;
@@ -63,7 +67,24 @@ const Confetti: React.FC<{colors: string[]; start: number}> = ({colors, start}) 
   return <AbsoluteFill>{pieces}</AbsoluteFill>;
 };
 
-export const YouTubeOP: React.FC<YouTubeOPProps> = ({titleTop, titleBottom, tagline, paper, ink, accent, second, third}) => {
+// 効果音の位置。映像の動きの開始フレームと同じ数値にする(仕様書 01 の「効果音」表)。
+const TYPE_START = 70;
+const TYPE_SPEED = 0.6; // 1フレームあたりの文字数
+const sfxCues = (tagline: string): SfxCue[] => [
+  {at: 0, sound: 'whoosh', volume: 0.8},
+  {at: 14, sound: 'pop', volume: 0.9},
+  {at: 24, sound: 'swish', volume: 0.5},
+  {at: 38, sound: 'swish', volume: 0.7},
+  {at: 62, sound: 'swish', volume: 0.4},
+  // タイプ表示: k 文字目が出るフレームで1打
+  ...Array.from(tagline).map((_, i) => ({at: TYPE_START + Math.ceil((i + 1) / TYPE_SPEED), sound: 'tick' as const, volume: 0.55})),
+  {at: 88, sound: 'pop', volume: 0.6},
+  {at: 103, sound: 'pop', volume: 0.5},
+  {at: 118, sound: 'pop', volume: 0.4},
+  {at: 150, sound: 'iris', volume: 0.8},
+];
+
+export const YouTubeOP: React.FC<YouTubeOPProps> = ({titleTop, titleBottom, tagline, paper, ink, accent, second, third, sfx}) => {
   const frame = useCurrentFrame();
   const {fps, width, height} = useVideoConfig();
 
@@ -89,7 +110,7 @@ export const YouTubeOP: React.FC<YouTubeOPProps> = ({titleTop, titleBottom, tagl
 
   // 下線とタグライン
   const underline = tween(frame, 62, 84, 0, 100, EASE.out);
-  const typed = Math.max(0, Math.min(tagline.length, Math.floor((frame - 70) * 0.6)));
+  const typed = Math.max(0, Math.min(tagline.length, Math.floor((frame - TYPE_START) * TYPE_SPEED)));
 
   // ホールド中のゆっくりした寄り
   const push = tween(frame, 60, 150, 1, 1.05, EASE.linear);
@@ -148,6 +169,7 @@ export const YouTubeOP: React.FC<YouTubeOPProps> = ({titleTop, titleBottom, tagl
 
         {bars}
       </AbsoluteFill>
+      <SfxTrack cues={sfxCues(tagline)} enabled={sfx} />
     </AbsoluteFill>
   );
 };

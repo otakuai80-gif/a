@@ -10,11 +10,12 @@ import {makeGrid} from '../../lib/timing';
 import {ANIME_OP_BPM, ANIME_OP_CUTS} from './cuts';
 
 /**
- * アニメ風OP 試作 v0(150 BPM、20小節 = 32秒 / 960フレーム)
+ * アニメ風OP 試作 v1(150 BPM、20小節 = 32秒 / 960フレーム)
  * 仕様: docs/specs/02-anime.md「試作仕様 ANIME-OP」
  * カット割りは ./cuts.ts が正本。ここは各カットの絵作りだけを書く。
  *
  * 題名、クレジット、図形はすべてこの試作用の創作。キャラクターの絵は ArtSlot に外から入れる。
+ * v1: 仮BGM を追加(audio)。A パートのカット間をクロスディゾルブでつなぐ(cuts.ts の dissolve)。
  */
 export const animeOPSchema = z.object({
   title: z.string(),
@@ -22,8 +23,11 @@ export const animeOPSchema = z.object({
   words: z.array(z.string()).min(8),
   credits: z.array(z.object({role: z.string(), name: z.string()})).length(8),
   art: z.object({a: z.string(), b: z.string(), c: z.string()}),
-  guideClick: z.boolean(),
+  /** bgm: 仮BGM(scripts/make-bgm.py)、click: 拍のクリック音、none: 無音 */
+  audio: z.enum(['bgm', 'click', 'none']),
 });
+
+const AUDIO_FILES = {bgm: 'audio/anime-op-bgm.wav', click: 'audio/click-150bpm.wav'} as const;
 
 export type AnimeOPProps = z.infer<typeof animeOPSchema>;
 
@@ -76,6 +80,13 @@ const Flash: React.FC<{at: number; length?: number; color?: string}> = ({at, len
   const frame = useCurrentFrame();
   const o = frame < at ? 0 : tween(frame, at, at + length, 1, 0, EASE.out);
   return <AbsoluteFill style={{background: color, opacity: o, pointerEvents: 'none'}} />;
+};
+
+/** カットの頭で frames フレームかけて現れる(クロスディゾルブの上側) */
+const DissolveIn: React.FC<{frames: number; children: React.ReactNode}> = ({frames, children}) => {
+  const frame = useCurrentFrame();
+  const o = frames > 0 ? tween(frame, 0, frames, 0, 1, EASE.inOut) : 1;
+  return <AbsoluteFill style={{opacity: o}}>{children}</AbsoluteFill>;
 };
 
 /* ---------- C01 暗転、閃光、一本の線 ---------- */
@@ -400,7 +411,7 @@ const C13: React.FC<{title: string; titleEn: string; credit: Credit}> = ({title,
   );
 };
 
-export const AnimeOP: React.FC<AnimeOPProps> = ({title, titleEn, words, credits, art, guideClick}) => {
+export const AnimeOP: React.FC<AnimeOPProps> = ({title, titleEn, words, credits, art, audio}) => {
   const {fps} = useVideoConfig();
   const grid = makeGrid(ANIME_OP_BPM, fps);
 
@@ -426,17 +437,21 @@ export const AnimeOP: React.FC<AnimeOPProps> = ({title, titleEn, words, credits,
 
   return (
     <AbsoluteFill style={{background: C.ink}}>
-      {ANIME_OP_CUTS.map((cut) => {
+      {ANIME_OP_CUTS.map((cut, i) => {
         const from = grid.bar(cut.bar, cut.beat);
         const to = grid.bar(cut.bar, cut.beat + cut.beats);
+        // 次のカットがディゾルブで入るときは、その間だけこのカットを下に残す
+        const next = ANIME_OP_CUTS[i + 1];
+        const tail = next?.dissolve ? grid.beat(next.dissolve) : 0;
+        const fadeIn = cut.dissolve ? grid.beat(cut.dissolve) : 0;
         return (
-          <Sequence key={cut.id} name={`${cut.id} ${cut.note}`} from={from} durationInFrames={to - from}>
-            {scenes[cut.id]}
+          <Sequence key={cut.id} name={`${cut.id} ${cut.note}`} from={from} durationInFrames={to - from + tail}>
+            <DissolveIn frames={fadeIn}>{scenes[cut.id]}</DissolveIn>
           </Sequence>
         );
       })}
       <Grain opacity={0.1} holdFrames={2} />
-      {guideClick ? <Html5Audio src={staticFile('audio/click-150bpm.wav')} /> : null}
+      {audio !== 'none' ? <Html5Audio src={staticFile(AUDIO_FILES[audio])} /> : null}
     </AbsoluteFill>
   );
 };

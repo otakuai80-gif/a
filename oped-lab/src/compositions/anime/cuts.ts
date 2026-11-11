@@ -16,6 +16,11 @@ export type Cut = {
   beats: number;
   section: 'イントロ' | '題字' | 'Aパート' | 'ビルド' | 'サビ' | '締め';
   note: string;
+  /**
+   * 前のカットからのクロスディゾルブの長さ(拍)。省略すると直接切り替える。
+   * ディゾルブはカットの開始拍から始まり、その間は前のカットが下に残る(A1 の技法)。
+   */
+  dissolve?: number;
 };
 
 export const ANIME_OP_CUTS: Cut[] = [
@@ -23,9 +28,9 @@ export const ANIME_OP_CUTS: Cut[] = [
   {id: 'C02', bar: 1, beat: 0, beats: 4, section: 'イントロ', note: '白黒、輪郭の欧文、赤の点滅'},
   {id: 'C03', bar: 2, beat: 0, beats: 8, section: '題字', note: '1拍目は地色のみ、2拍目に題字'},
   {id: 'C04', bar: 4, beat: 0, beats: 8, section: 'Aパート', note: '地平線、左パン、素材A'},
-  {id: 'C05', bar: 6, beat: 0, beats: 8, section: 'Aパート', note: '信号塔、上へ移動、縦書きクレジット'},
-  {id: 'C06', bar: 8, beat: 0, beats: 8, section: 'Aパート', note: '車窓、横流れ、素材B'},
-  {id: 'C07', bar: 10, beat: 0, beats: 8, section: 'Aパート', note: '信号の寄り、固定、赤から青'},
+  {id: 'C05', bar: 6, beat: 0, beats: 8, section: 'Aパート', note: '信号塔、上へ移動、縦書きクレジット', dissolve: 1},
+  {id: 'C06', bar: 8, beat: 0, beats: 8, section: 'Aパート', note: '車窓、横流れ、素材B', dissolve: 1},
+  {id: 'C07', bar: 10, beat: 0, beats: 8, section: 'Aパート', note: '信号の寄り、固定、赤から青', dissolve: 1},
   {id: 'C08a', bar: 12, beat: 0, beats: 2, section: 'ビルド', note: '文字カット(2拍)'},
   {id: 'C08b', bar: 12, beat: 2, beats: 2, section: 'ビルド', note: '文字カット(2拍)'},
   {id: 'C09a', bar: 13, beat: 0, beats: 1, section: 'ビルド', note: '文字カット(1拍)'},

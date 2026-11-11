@@ -2,13 +2,14 @@ import React from 'react';
 import {AbsoluteFill, useCurrentFrame, useVideoConfig} from 'remotion';
 import {z} from 'zod';
 import {zColor} from '@remotion/zod-types';
+import {SfxCue, SfxTrack} from '../../components/Sfx';
 import {SplitText} from '../../components/SplitText';
 import {StrokeDraw} from '../../components/StrokeDraw';
 import {EASE, tween} from '../../lib/anim';
 import {FONT} from '../../lib/fonts';
 
 /**
- * 番組・企業系オープナー 試作 v0(8秒 / 240フレーム)
+ * 番組・企業系オープナー 試作 v1(8秒 / 240フレーム)
  * 仕様: docs/specs/03-broadcast-corporate.md「試作仕様 CORP-OPENER」
  *
  *   0- 24  上下の黒帯が開く(レターボックス)
@@ -19,6 +20,8 @@ import {FONT} from '../../lib/fonts';
  * 108-140  細い罫線が伸び、タグラインが上がってくる
  * 150-180  光の帯がマークを一度横切る
  * 210-240  黒帯が閉じる
+ *
+ * 効果音(v1): 線描きに細い音、塗りに低い音(SFX_CUES)。sfx を false にすると鳴らさない。
  */
 export const corpOpenerSchema = z.object({
   company: z.string(),
@@ -27,6 +30,7 @@ export const corpOpenerSchema = z.object({
   bg: zColor(),
   ink: zColor(),
   accent: zColor(),
+  sfx: z.boolean(),
 });
 
 export type CorpOpenerProps = z.infer<typeof corpOpenerSchema>;
@@ -35,7 +39,19 @@ export type CorpOpenerProps = z.infer<typeof corpOpenerSchema>;
 const MARK_OUTER = 'M 44 12 H 156 A 32 32 0 0 1 188 44 V 156 A 32 32 0 0 1 156 188 H 44 A 32 32 0 0 1 12 156 V 44 A 32 32 0 0 1 44 12 Z';
 const MARK_LINE = 'M 52 142 L 92 98 L 118 122 L 152 66';
 
-export const CorpOpener: React.FC<CorpOpenerProps> = ({company, companyEn, tagline, bg, ink, accent}) => {
+// 効果音の位置。映像の動きの開始フレームと同じ数値にする(仕様書 03 の「効果音」表)。
+const SFX_CUES: SfxCue[] = [
+  {at: 0, sound: 'whoosh', volume: 0.45},
+  {at: 16, sound: 'pen', volume: 0.6},
+  {at: 30, sound: 'pen', volume: 0.4},
+  {at: 60, sound: 'thud', volume: 0.9},
+  {at: 62, sound: 'pop', volume: 0.3},
+  {at: 76, sound: 'swish', volume: 0.45},
+  {at: 150, sound: 'sparkle', volume: 0.55},
+  {at: 210, sound: 'whoosh', volume: 0.45},
+];
+
+export const CorpOpener: React.FC<CorpOpenerProps> = ({company, companyEn, tagline, bg, ink, accent, sfx}) => {
   const frame = useCurrentFrame();
   const {durationInFrames} = useVideoConfig();
 
@@ -99,6 +115,7 @@ export const CorpOpener: React.FC<CorpOpenerProps> = ({company, companyEn, tagli
       {/* レターボックス */}
       <div style={{position: 'absolute', left: 0, right: 0, top: 0, height: `${bar}%`, background: '#000'}} />
       <div style={{position: 'absolute', left: 0, right: 0, bottom: 0, height: `${bar}%`, background: '#000'}} />
+      <SfxTrack cues={SFX_CUES} enabled={sfx} />
     </AbsoluteFill>
   );
 };
